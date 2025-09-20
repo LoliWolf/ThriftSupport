@@ -1,0 +1,26 @@
+<idea-plugin>
+    <id>
+        ${pluginGroup}.thrift-support
+    </id>
+    <name>Thrift Support</name>
+    <vendor email="support@example.com" url="https://example.com">Thrift Support</vendor>
+    <description><![CDATA[
+        <p>Lightweight Apache Thrift language support.</p>
+        <ul>
+            <li>Syntax highlighting for <code>.thrift</code> files.</li>
+            <li>Code reformatting with IntelliJ's native shortcut.</li>
+            <li>Cross-platform support for Windows, Linux, and macOS.</li>
+        </ul>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileType name="Thrift" implementationClass="com.github.thriftsupport.lang.ThriftFileType" fieldName="INSTANCE" extensions="thrift" language="Thrift"/>
+        <lang.syntaxHighlighterFactory language="Thrift" implementationClass="com.github.thriftsupport.highlight.ThriftSyntaxHighlighterFactory"/>
+        <lang.parserDefinition language="Thrift" implementationClass="com.github.thriftsupport.parser.ThriftParserDefinition"/>
+        <lang.commenter language="Thrift" implementationClass="com.github.thriftsupport.lang.ThriftCommenter"/>
+        <lang.colorSettingsPage implementationClass="com.github.thriftsupport.highlight.ThriftColorSettingsPage"/>
+        <lang.formatter language="Thrift" implementationClass="com.github.thriftsupport.format.ThriftFormattingModelBuilder"/>
+    </extensions>
+</idea-plugin>

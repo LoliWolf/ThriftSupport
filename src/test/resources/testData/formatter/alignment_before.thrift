@@ -1,0 +1,17 @@
+// Test file for alignment formatting
+const i32 SHORT_CONST = 1;
+const i32 VERY_LONG_CONSTANT_NAME = 2;
+const string ANOTHER_CONST = "value";
+
+struct TestStruct {
+    1: i32 id,
+    2: string name,
+    3: optional bool flag,
+    4: required double value,
+}
+
+service TestService {
+    void shortMethod(),
+    string veryLongMethodName(1: i32 param),
+    bool anotherMethod(1: string arg1, 2: i32 arg2),
+}

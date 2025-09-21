@@ -3,15 +3,26 @@ const i32 SHORT_CONST = 1;
 const i32 VERY_LONG_CONSTANT_NAME = 2;
 const string ANOTHER_CONST = "value";
 
+enum Status {
+    UNKNOWN=0, // 0
+    ACTIVE  =1,    // 1
+    INACTIVE=  2,
+
+    DELETED   =3// 3
+}
+
 struct TestStruct {
-    1: i32 id,
-    2: string name,
-    3: optional bool flag,
-    4: required double value,
+    1: optional  i32    id,
+    2: required string  name,
+    3: optional list <string> tags,
+
+    4: optional map <string, string> metadata,
+    5: optional set <i32> relatedIds,
 }
 
 service TestService {
-    void shortMethod(),
-    string veryLongMethodName(1: i32 param),
-    bool anotherMethod(1: string arg1, 2: i32 arg2),
+    void   shortMethod(),
+    string   veryLongMethodName(1: i32 param)   throws(1: InvalidOperation err),
+    bool    anotherMethod(1: string arg1, 2: i32 arg2),
 }
+

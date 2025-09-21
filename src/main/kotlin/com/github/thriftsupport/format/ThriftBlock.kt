@@ -136,66 +136,6 @@ class ThriftBlock(
                     alignments["field_name"] = Alignment.createAlignment(true)
                 }
             }
-            "ThriftElement.SERVICE" -> {
-                // 为服务方法创建对齐
-                try {
-                    val logFile = java.io.File("D:\\Projects\\ThriftSupport\\formatter_debug.log")
-                    logFile.appendText("ThriftBlock: SERVICE branch - examining children\n")
-                } catch (e: Exception) {
-                    // 忽略日志错误
-                }
-                
-                val functionNodes = mutableListOf<ASTNode>()
-                
-                // 查找BLOCK子节点，然后在BLOCK中查找FUNCTION节点
-                var child = myNode.firstChildNode
-                while (child != null) {
-                    try {
-                        val logFile = java.io.File("D:\\Projects\\ThriftSupport\\formatter_debug.log")
-                        logFile.appendText("ThriftBlock: SERVICE child type: ${child.elementType}, text: '${child.text.take(50)}'\n")
-                    } catch (e: Exception) {
-                        // 忽略日志错误
-                    }
-                    
-                    if (child.elementType == ThriftElementTypes.BLOCK) {
-                        // 在BLOCK中查找FUNCTION节点
-                        var blockChild = child.firstChildNode
-                        while (blockChild != null) {
-                            try {
-                                val logFile = java.io.File("D:\\Projects\\ThriftSupport\\formatter_debug.log")
-                                logFile.appendText("ThriftBlock: BLOCK child type: ${blockChild.elementType}, text: '${blockChild.text.take(50)}'\n")
-                            } catch (e: Exception) {
-                                // 忽略日志错误
-                            }
-                            
-                            if (blockChild.elementType == ThriftElementTypes.FUNCTION) {
-                                functionNodes.add(blockChild)
-                                try {
-                                    val logFile = java.io.File("D:\\Projects\\ThriftSupport\\formatter_debug.log")
-                                    logFile.appendText("ThriftBlock: Found FUNCTION node in BLOCK: ${blockChild.text.take(50)}\n")
-                                } catch (e: Exception) {
-                                    // 忽略日志错误
-                                }
-                            }
-                            blockChild = blockChild.treeNext
-                        }
-                    }
-                    child = child.treeNext
-                }
-                
-                if (functionNodes.isNotEmpty()) {
-                    try {
-                        val logFile = java.io.File("D:\\Projects\\ThriftSupport\\formatter_debug.log")
-                        logFile.appendText("ThriftBlock: Creating method alignments for ${functionNodes.size} methods\n")
-                    } catch (e: Exception) {
-                        // 忽略日志错误
-                    }
-                    
-                    alignments["method_type"] = Alignment.createAlignment(true)
-                    alignments["method_name"] = Alignment.createAlignment(true)
-                    alignments["method_throws"] = Alignment.createAlignment(true)
-                }
-            }
         }
         
         return alignments
@@ -340,49 +280,6 @@ class ThriftBlock(
                 }
             }
             // 在方法定义内部的元素对齐
-            ThriftElementTypes.FUNCTION -> {
-                when (childType) {
-                    ThriftElementTypes.TYPE -> {
-                        try {
-                            val logFile = java.io.File("D:\\Projects\\ThriftSupport\\formatter_debug.log")
-                            logFile.appendText("ThriftBlock: Aligning method type element: ${child.text}\n")
-                        } catch (e: Exception) {
-                            // 忽略日志错误
-                        }
-                        effectiveAlignments["method_type"]
-                    }
-                    ThriftTokenTypes.IDENTIFIER -> {
-                        // 判断是返回类型还是方法名
-                        if (isMethodName(child)) {
-                            try {
-                                val logFile = java.io.File("D:\\Projects\\ThriftSupport\\formatter_debug.log")
-                                logFile.appendText("ThriftBlock: Aligning method name: ${child.text}\n")
-                            } catch (e: Exception) {
-                                // 忽略日志错误
-                            }
-                            effectiveAlignments["method_name"]
-                        } else {
-                            try {
-                                val logFile = java.io.File("D:\\Projects\\ThriftSupport\\formatter_debug.log")
-                                logFile.appendText("ThriftBlock: Aligning method type identifier: ${child.text}\n")
-                            } catch (e: Exception) {
-                                // 忽略日志错误
-                            }
-                            effectiveAlignments["method_type"]
-                        }
-                    }
-                    ThriftTokenTypes.KW_THROWS -> {
-                        try {
-                            val logFile = java.io.File("D:\\Projects\\ThriftSupport\\formatter_debug.log")
-                            logFile.appendText("ThriftBlock: Aligning method throws\n")
-                        } catch (e: Exception) {
-                            // 忽略日志错误
-                        }
-                        effectiveAlignments["method_throws"]
-                    }
-                    else -> null
-                }
-            }
             else -> null
         }
         
@@ -439,11 +336,11 @@ class ThriftBlock(
         return false
     }
     
+
     private fun isMethodName(node: ASTNode): Boolean {
-        // 在方法定义中，方法名通常在返回类型之后
         val parent = node.treeParent
         if (parent?.elementType != ThriftElementTypes.FUNCTION) return false
-        
+
         var foundType = false
         var child = parent.firstChildNode
         while (child != null) {
@@ -462,6 +359,11 @@ class ThriftBlock(
     }
 
     override fun getSpacing(child1: Block?, child2: Block): Spacing? {
+        val genericSpacing = computeGenericSpacing(child1, child2)
+        if (genericSpacing != null) {
+            return genericSpacing
+        }
+
         val alignmentSpacing = computeAlignmentSpacing(child1, child2)
         return alignmentSpacing ?: spacingBuilder.getSpacing(this, child1, child2)
     }
@@ -478,9 +380,43 @@ class ThriftBlock(
             ThriftElementTypes.CONST -> computeConstSpacing(parent, leftNode, rightNode)
             ThriftElementTypes.FIELD -> computeFieldSpacing(parent, leftNode, rightNode)
             ThriftElementTypes.FUNCTION -> computeFunctionSpacing(parent, leftNode, rightNode)
+            ThriftElementTypes.ENUM_FIELD -> computeEnumSpacing(parent, leftNode, rightNode)
             else -> null
         }
     }
+
+    private fun computeGenericSpacing(child1: Block?, child2: Block): Spacing? {
+        val rightBlock = child2 as? ThriftBlock ?: return null
+        val leftBlock = child1 as? ThriftBlock
+        return computeGenericSpacing(leftBlock?.node, rightBlock.node)
+    }
+
+    private fun computeGenericSpacing(leftNode: ASTNode?, rightNode: ASTNode): Spacing? {
+        if (findGenericContainer(rightNode) == null && findGenericContainer(leftNode) == null) {
+            return null
+        }
+
+        return when {
+            rightNode.elementType == ThriftTokenTypes.LT -> zeroSpacing()
+            leftNode?.elementType == ThriftTokenTypes.LT -> zeroSpacing()
+            rightNode.elementType == ThriftTokenTypes.GT -> zeroSpacing()
+            leftNode?.elementType == ThriftTokenTypes.COMMA -> zeroSpacing()
+            else -> null
+        }
+    }
+
+    private fun findGenericContainer(node: ASTNode?): ASTNode? {
+        var current = node
+        while (current != null) {
+            if (current.elementType == ThriftElementTypes.TYPE && current.findChildOfType(ThriftTokenTypes.LT) != null) {
+                return current
+            }
+            current = current.treeParent
+        }
+        return null
+    }
+
+    private fun zeroSpacing(): Spacing = Spacing.createSpacing(0, 0, 0, false, 0)
 
     private fun computeConstSpacing(parent: ASTNode, leftNode: ASTNode, rightNode: ASTNode): Spacing? {
         if (leftNode.elementType == ThriftElementTypes.TYPE &&
@@ -510,8 +446,8 @@ class ThriftBlock(
 
     private fun computeFieldSpacing(parent: ASTNode, leftNode: ASTNode, rightNode: ASTNode): Spacing? {
         if (parent.elementType != ThriftElementTypes.FIELD) return null
-        val blockNode = parent.treeParent ?: return null
-        val widthInfo = blockNode.computeFieldWidths()
+        val containerNode = parent.treeParent ?: return null
+        val widthInfo = containerNode.computeFieldGroupWidths(parent)
 
         if (leftNode.elementType == ThriftTokenTypes.COLON &&
             rightNode.elementType != TokenType.WHITE_SPACE &&
@@ -536,16 +472,53 @@ class ThriftBlock(
         return null
     }
 
-    @Suppress("UNUSED_PARAMETER")
     private fun computeFunctionSpacing(parent: ASTNode, leftNode: ASTNode, rightNode: ASTNode): Spacing? {
         if (parent.elementType != ThriftElementTypes.FUNCTION) return null
-        val serviceBlock = parent.treeParent ?: return null
 
         if (rightNode.elementType == ThriftTokenTypes.IDENTIFIER && isMethodName(rightNode)) {
-            val maxReturnWidth = serviceBlock.computeFunctionReturnWidth()
-            val currentWidth = parent.functionReturnSegmentWidth()
-            val spaces = (maxReturnWidth - currentWidth + 1).coerceAtLeast(1)
+            return fixedSpacing(1)
+        }
+
+        if ((leftNode.elementType == ThriftTokenTypes.RPAREN || leftNode.elementType == ThriftElementTypes.PARAM_LIST) &&
+            rightNode.elementType == ThriftTokenTypes.KW_THROWS
+        ) {
+            return fixedSpacing(1)
+        }
+
+        return null
+    }
+
+    private fun computeEnumSpacing(parent: ASTNode, leftNode: ASTNode, rightNode: ASTNode): Spacing? {
+        if (parent.elementType != ThriftElementTypes.ENUM_FIELD) return null
+        val enumNode = parent.treeParent ?: return null
+        val widthInfo = enumNode.computeEnumWidthInfo(parent)
+
+        if (leftNode.elementType == ThriftTokenTypes.IDENTIFIER && rightNode.elementType == ThriftTokenTypes.EQUALS) {
+            val nameLength = leftNode.normalizedLength()
+            val spaces = (widthInfo.maxNameWidth - nameLength + 1).coerceAtLeast(1)
             return fixedSpacing(spaces)
+        }
+
+        if (rightNode.isComment()) {
+            val nameNode = parent.findChildOfType(ThriftTokenTypes.IDENTIFIER) ?: return null
+            val nameLength = nameNode.normalizedLength()
+            val hasEquals = parent.findChildOfType(ThriftTokenTypes.EQUALS) != null
+            val valueWidth = parent.enumValueSegmentWidth()
+            val baseSpacing = 2
+
+            return if (hasEquals) {
+                val spaces = (widthInfo.maxValueWidth - valueWidth + baseSpacing).coerceAtLeast(baseSpacing)
+                fixedSpacing(spaces)
+            } else {
+                val namePadding = widthInfo.maxNameWidth - nameLength + 1
+                val equalsPadding = if (widthInfo.hasEquals) 1 else 0
+                val spaces = namePadding + equalsPadding + (widthInfo.maxValueWidth - valueWidth) + baseSpacing
+                fixedSpacing(spaces.coerceAtLeast(baseSpacing))
+            }
+        }
+
+        if (leftNode.elementType == ThriftTokenTypes.EQUALS && !rightNode.isComment() && rightNode.elementType != TokenType.WHITE_SPACE) {
+            return fixedSpacing(1)
         }
 
         return null
@@ -577,34 +550,119 @@ class ThriftBlock(
         val maxTypeWithoutQualifier: Int
     )
 
-    private fun ASTNode.computeFieldWidths(): FieldWidthInfo {
+    private fun ASTNode.computeFieldGroupWidths(targetField: ASTNode): FieldWidthInfo {
+        val group = collectGroupForChild(targetField, ThriftElementTypes.FIELD)
         var maxId = 0
         var maxWithQualifier = 0
         var maxWithoutQualifier = 0
-        for (child in childrenSequence()) {
-            if (child.elementType == ThriftElementTypes.FIELD) {
-                child.findChildOfType(ThriftTokenTypes.INTEGER_LITERAL)?.let {
-                    maxId = maxOf(maxId, it.normalizedLength())
-                }
-                val typeWidth = child.fieldTypeSegmentWidth()
-                if (child.hasQualifier()) {
-                    maxWithQualifier = maxOf(maxWithQualifier, typeWidth)
-                } else {
-                    maxWithoutQualifier = maxOf(maxWithoutQualifier, typeWidth)
-                }
+        for (field in group) {
+            field.findChildOfType(ThriftTokenTypes.INTEGER_LITERAL)?.let {
+                maxId = maxOf(maxId, it.normalizedLength())
+            }
+            val typeWidth = field.fieldTypeSegmentWidth()
+            if (field.hasQualifier()) {
+                maxWithQualifier = maxOf(maxWithQualifier, typeWidth)
+            } else {
+                maxWithoutQualifier = maxOf(maxWithoutQualifier, typeWidth)
             }
         }
         return FieldWidthInfo(maxId, maxWithQualifier, maxWithoutQualifier)
     }
 
-    private fun ASTNode.computeFunctionReturnWidth(): Int {
-        var maxWidth = 0
-        for (child in childrenSequence()) {
-            if (child.elementType == ThriftElementTypes.FUNCTION) {
-                maxWidth = maxOf(maxWidth, child.functionReturnSegmentWidth())
+    private data class EnumWidthInfo(
+        val maxNameWidth: Int,
+        val maxValueWidth: Int,
+        val hasEquals: Boolean
+    )
+
+    private fun ASTNode.computeEnumWidthInfo(targetField: ASTNode): EnumWidthInfo {
+        val group = collectGroupForChild(targetField, ThriftElementTypes.ENUM_FIELD)
+        var maxName = 0
+        var maxValue = 0
+        var hasEquals = false
+        for (field in group) {
+            field.findChildOfType(ThriftTokenTypes.IDENTIFIER)?.let {
+                maxName = maxOf(maxName, it.normalizedLength())
+            }
+            if (!hasEquals && field.findChildOfType(ThriftTokenTypes.EQUALS) != null) {
+                hasEquals = true
+            }
+            maxValue = maxOf(maxValue, field.enumValueSegmentWidth())
+        }
+        return EnumWidthInfo(maxName, maxValue, hasEquals)
+    }
+
+    private fun ASTNode.collectGroupForChild(target: ASTNode, childType: IElementType): List<ASTNode> {
+        val result = mutableListOf<ASTNode>()
+        var currentGroup = mutableListOf<ASTNode>()
+        var child = firstChildNode
+        while (child != null) {
+            if (child.elementType == childType) {
+                currentGroup.add(child)
+            }
+            if (child.isGroupSeparator()) {
+                if (currentGroup.contains(target)) {
+                    result.addAll(currentGroup)
+                    break
+                }
+                currentGroup = mutableListOf()
+            }
+            child = child.treeNext
+        }
+        if (result.isEmpty() && currentGroup.contains(target)) {
+            result.addAll(currentGroup)
+        }
+        if (result.isEmpty() && target.elementType == childType) {
+            result.add(target)
+        }
+        return result
+    }
+
+    private fun ASTNode.isGroupSeparator(): Boolean {
+        if (elementType != TokenType.WHITE_SPACE) return false
+        var newlineCount = 0
+        for (ch in text) {
+            if (ch.code == 10) {
+                newlineCount++
+                if (newlineCount >= 2) {
+                    return true
+                }
             }
         }
-        return maxWidth
+        return false
+    }
+
+    private fun ASTNode.enumValueSegmentWidth(): Int {
+        val equalsNode = findChildOfType(ThriftTokenTypes.EQUALS)
+        val anchor = equalsNode ?: findChildOfType(ThriftTokenTypes.IDENTIFIER) ?: return 0
+        var width = 0
+        var previous: ASTNode? = null
+        var hasValueToken = false
+        var child = anchor.treeNext
+        while (child != null) {
+            when (child.elementType) {
+                TokenType.WHITE_SPACE -> {
+                    if (child.text.any { it.code == 10 }) {
+                        break
+                    }
+                }
+                ThriftTokenTypes.LINE_COMMENT,
+                ThriftTokenTypes.BLOCK_COMMENT -> break
+                else -> {
+                    if (previous != null && requiresSpaceBetween(previous, child)) {
+                        width += 1
+                    }
+                    width += child.normalizedLength()
+                    previous = child
+                    hasValueToken = true
+                }
+            }
+            child = child.treeNext
+        }
+        if (equalsNode != null && hasValueToken) {
+            width += 1 // space after '='
+        }
+        return width
     }
 
     private fun ASTNode.fieldTypeSegmentWidth(): Int {
@@ -635,26 +693,8 @@ class ThriftBlock(
             it.elementType == ThriftTokenTypes.KW_REQUIRED
         }
 
-    private fun ASTNode.functionReturnSegmentWidth(): Int {
-        val nameNode = childrenSequence()
-            .firstOrNull { it.elementType == ThriftTokenTypes.IDENTIFIER && isMethodName(it) }
-            ?: return 0
-
-        var width = 0
-        var previous: ASTNode? = null
-        var child = firstChildNode
-        while (child != null && child != nameNode) {
-            if (child.elementType != TokenType.WHITE_SPACE) {
-                if (previous != null && requiresSpaceBetween(previous, child)) {
-                    width += 1
-                }
-                width += child.normalizedLength()
-                previous = child
-            }
-            child = child.treeNext
-        }
-        return width
-    }
+    private fun ASTNode.isComment(): Boolean =
+        elementType == ThriftTokenTypes.LINE_COMMENT || elementType == ThriftTokenTypes.BLOCK_COMMENT
 
     private fun requiresSpaceBetween(previous: ASTNode, next: ASTNode): Boolean {
         return when (previous.elementType) {

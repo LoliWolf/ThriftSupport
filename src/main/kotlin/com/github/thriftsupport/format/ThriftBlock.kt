@@ -359,9 +359,9 @@ class ThriftBlock(
     }
 
     override fun getSpacing(child1: Block?, child2: Block): Spacing? {
-        val genericSpacing = computeGenericSpacing(child1, child2)
-        if (genericSpacing != null) {
-            return genericSpacing
+        val preSpacing = computePreSpacing(child1, child2)
+        if (preSpacing != null) {
+            return preSpacing
         }
 
         val alignmentSpacing = computeAlignmentSpacing(child1, child2)
@@ -383,6 +383,47 @@ class ThriftBlock(
             ThriftElementTypes.ENUM_FIELD -> computeEnumSpacing(parent, leftNode, rightNode)
             else -> null
         }
+    }
+
+    private fun computePreSpacing(child1: Block?, child2: Block): Spacing? {
+        val rightBlock = child2 as? ThriftBlock ?: return null
+        val leftBlock = child1 as? ThriftBlock
+        val leftNode = leftBlock?.node
+        val rightNode = rightBlock.node
+
+        computeTopLevelBlankLineSpacing(leftNode, rightNode)?.let { return it }
+        return computeGenericSpacing(leftNode, rightNode)
+    }
+
+    private fun computeTopLevelBlankLineSpacing(leftNode: ASTNode?, rightNode: ASTNode): Spacing? {
+        val braceParent = leftNode?.takeIf { it.elementType == ThriftTokenTypes.RBRACE }?.treeParent ?: return null
+        if (braceParent.elementType !in CONTAINER_TYPES) {
+            return null
+        }
+        val fileNode = braceParent.treeParent
+        if (fileNode?.elementType != ThriftElementTypes.FILE) {
+            return null
+        }
+
+        if (!shouldForceTopLevelBlankLine(rightNode)) {
+            return null
+        }
+
+        return Spacing.createSpacing(0, 0, 2, false, 1)
+    }
+
+    private fun shouldForceTopLevelBlankLine(rightNode: ASTNode): Boolean {
+        val type = rightNode.elementType
+        if (type in TOP_LEVEL_DECLARATION_ELEMENT_TYPES) {
+            return true
+        }
+        if (type in TOP_LEVEL_DECLARATION_START_TOKENS) {
+            return true
+        }
+        if (type == ThriftTokenTypes.LINE_COMMENT || type == ThriftTokenTypes.BLOCK_COMMENT) {
+            return rightNode.treeParent?.elementType == ThriftElementTypes.FILE
+        }
+        return false
     }
 
     private fun computeGenericSpacing(child1: Block?, child2: Block): Spacing? {
@@ -419,6 +460,10 @@ class ThriftBlock(
     private fun zeroSpacing(): Spacing = Spacing.createSpacing(0, 0, 0, false, 0)
 
     private fun computeConstSpacing(parent: ASTNode, leftNode: ASTNode, rightNode: ASTNode): Spacing? {
+        if (rightNode.isComment()) {
+            return fixedSpacing(1)
+        }
+
         if (leftNode.elementType == ThriftElementTypes.TYPE &&
             rightNode.elementType == ThriftTokenTypes.IDENTIFIER &&
             isConstantName(rightNode)
@@ -446,7 +491,35 @@ class ThriftBlock(
 
     private fun computeFieldSpacing(parent: ASTNode, leftNode: ASTNode, rightNode: ASTNode): Spacing? {
         if (parent.elementType != ThriftElementTypes.FIELD) return null
+
+        if (rightNode.isComment()) {
+            return fixedSpacing(1)
+        }
+
         val containerNode = parent.treeParent ?: return null
+
+        if (containerNode.elementType == ThriftElementTypes.THROWS) {
+            if (leftNode.elementType == ThriftTokenTypes.COLON &&
+                rightNode.elementType != TokenType.WHITE_SPACE &&
+                rightNode.elementType != ThriftTokenTypes.COMMA
+            ) {
+                return fixedSpacing(1)
+            }
+
+            if (rightNode.elementType == ThriftTokenTypes.IDENTIFIER && isFieldName(rightNode)) {
+                return fixedSpacing(1)
+            }
+
+            if (leftNode.elementType == ThriftTokenTypes.EQUALS &&
+                rightNode.elementType != TokenType.WHITE_SPACE &&
+                !rightNode.isComment()
+            ) {
+                return fixedSpacing(1)
+            }
+
+            return null
+        }
+
         val widthInfo = containerNode.computeFieldGroupWidths(parent)
 
         if (leftNode.elementType == ThriftTokenTypes.COLON &&
@@ -742,6 +815,7 @@ class ThriftBlock(
             parentType == ThriftElementTypes.THROWS && elementType !in PARENS -> Indent.getNormalIndent()
             
             // 结构体、联合体、异常、枚举、服务内的字段需要缩进
+            parentType in CONTAINER_TYPES && myNode.isComment() -> Indent.getNormalIndent()
             parentType in CONTAINER_TYPES && elementType == ThriftElementTypes.FIELD -> Indent.getNormalIndent()
             parentType in CONTAINER_TYPES && elementType == ThriftElementTypes.ENUM_FIELD -> Indent.getNormalIndent()
             parentType in CONTAINER_TYPES && elementType == ThriftElementTypes.FUNCTION -> Indent.getNormalIndent()
@@ -773,6 +847,21 @@ class ThriftBlock(
             ThriftElementTypes.EXCEPTION,
             ThriftElementTypes.ENUM,
             ThriftElementTypes.SERVICE
+        )
+        private val TOP_LEVEL_DECLARATION_ELEMENT_TYPES = setOf(
+            ThriftElementTypes.ENUM,
+            ThriftElementTypes.STRUCT,
+            ThriftElementTypes.UNION,
+            ThriftElementTypes.EXCEPTION,
+            ThriftElementTypes.SERVICE
+        )
+
+        private val TOP_LEVEL_DECLARATION_START_TOKENS = setOf(
+            ThriftTokenTypes.KW_ENUM,
+            ThriftTokenTypes.KW_STRUCT,
+            ThriftTokenTypes.KW_EXCEPTION,
+            ThriftTokenTypes.KW_SERVICE,
+            ThriftTokenTypes.KW_UNION
         )
     }
 }
